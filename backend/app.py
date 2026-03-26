@@ -1,4 +1,4 @@
-
+import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from scapy.all import sniff, IP, TCP, UDP, DNS, DNSQR, Raw
@@ -198,8 +198,11 @@ def reset():
 # ─────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────
+
+
 if __name__ == "__main__":
     capture_thread = threading.Thread(target=start_capture, daemon=True)
     capture_thread.start()
-    print("[*] API running at http://localhost:5000")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"[*] API running at http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
