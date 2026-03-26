@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetScope — Traffic Analyzer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --bg2: #161b22;
+        --bg3: #1c2129;
+        --border: #30363d;
+        --text: #e6edf3;
+        --muted: #7d8590;
+        --green: #3fb950;
+        --blue: #58a6ff;
+        --amber: #d29922;
+        --red: #f85149;
+        --purple: #bc8cff;
+        --teal: #39d353;
+        --mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+
+      /* ── Header ── */
+      header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 20px;
+        background: var(--bg2);
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 0;
+        z-index: 50;
+      }
+      .logo {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--blue);
+        letter-spacing: 0.05em;
+      }
+      .logo span {
+        color: var(--muted);
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 6px var(--green);
+        animation: pulse 2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      #status-text {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .header-right {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 4px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: var(--mono);
+        font-size: 12px;
+        transition: border-color 0.15s;
+      }
+      button:hover {
+        border-color: var(--blue);
+      }
+      button.danger:hover {
+        border-color: var(--red);
+        color: var(--red);
+      }
+
+      /* ── Layout ── */
+      .main {
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      /* ── Stat cards ── */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+      .stat-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+      .stat-label {
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        margin-top: 4px;
+      }
+      .stat-value.blue {
+        color: var(--blue);
+      }
+      .stat-value.green {
+        color: var(--green);
+      }
+      .stat-value.amber {
+        color: var(--amber);
+      }
+      .stat-value.purple {
+        color: var(--purple);
+      }
+      .stat-sub {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+
+      /* ── Grid panels ── */
+      .mid-row {
+        display: grid;
+        grid-template-columns: 280px 1fr 260px;
+        gap: 14px;
+      }
+      .panel {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .panel-header .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        margin-right: 6px;
+      }
+      .panel-header span {
+        display: flex;
+        align-items: center;
+      }
+      .panel-body {
+        padding: 12px;
+      }
+
+      /* ── Protocol chart ── */
+      .chart-wrap {
+        height: 180px;
+        position: relative;
+      }
+
+      /* ── Top IPs ── */
+      .ip-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .ip-row:last-child {
+        border-bottom: none;
+      }
+      .ip-addr {
+        color: var(--blue);
+        flex: 1;
+        font-size: 12px;
+      }
+      .ip-bar-wrap {
+        width: 80px;
+        height: 4px;
+        background: var(--bg3);
+        border-radius: 2px;
+      }
+      .ip-bar {
+        height: 4px;
+        background: var(--blue);
+        border-radius: 2px;
+        transition: width 0.4s;
+      }
+      .ip-count {
+        color: var(--muted);
+        font-size: 11px;
+        width: 36px;
+        text-align: right;
+      }
+
+      /* ── Alerts ── */
+      .alert-item {
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        border-left: 3px solid;
+        background: var(--bg3);
+        font-size: 12px;
+      }
+      .alert-item.HIGH {
+        border-color: var(--red);
+      }
+      .alert-item.MEDIUM {
+        border-color: var(--amber);
+      }
+      .alert-type {
+        font-weight: 700;
+      }
+      .HIGH .alert-type {
+        color: var(--red);
+      }
+      .MEDIUM .alert-type {
+        color: var(--amber);
+      }
+      .alert-src {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 2px;
+      }
+      .alert-time {
+        color: var(--muted);
+        font-size: 11px;
+        float: right;
+      }
+      .no-alerts {
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+        padding: 20px 0;
+      }
+
+      /* ── Packet table ── */
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      thead th {
+        text-align: left;
+        padding: 6px 10px;
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+        background: var(--bg3);
+      }
+      tbody tr {
+        border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+        transition: background 0.1s;
+      }
+      tbody tr:hover {
+        background: var(--bg3);
+      }
+      tbody td {
+        padding: 5px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .proto-badge {
+        padding: 1px 7px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .proto-HTTP,
+      .proto-HTTPS {
+        background: #0d2137;
+        color: var(--blue);
+      }
+      .proto-TCP {
+        background: #0d2a1a;
+        color: var(--green);
+      }
+      .proto-UDP {
+        background: #1f1a06;
+        color: var(--amber);
+      }
+      .proto-DNS {
+        background: #1a0d2a;
+        color: var(--purple);
+      }
+      .proto-SSH {
+        background: #2a1a0d;
+        color: #ff9966;
+      }
+      .proto-FTP {
+        background: #1a1a1a;
+        color: var(--muted);
+      }
+      .proto-OTHER {
+        background: #1a1a1a;
+        color: var(--muted);
+      }
+      td.src,
+      td.dst {
+        color: var(--blue);
+      }
+      td.info {
+        color: var(--muted);
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      td.len {
+        color: var(--muted);
+        text-align: right;
+      }
+
+      .empty-msg {
+        text-align: center;
+        padding: 40px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .empty-msg .big {
+        font-size: 32px;
+        margin-bottom: 8px;
+        opacity: 0.3;
+      }
+
+      /* ── Filter bar ── */
+      .filter-bar {
+        display: flex;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg3);
+      }
+      .filter-bar select,
+      .filter-bar input {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 4px 8px;
+        border-radius: 5px;
+        font-family: var(--mono);
+        font-size: 12px;
+        outline: none;
+      }
+      .filter-bar input {
+        flex: 1;
+      }
+      .pkt-count {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 11px;
+        align-self: center;
+      }
+
+      /* ── Scrollbar ── */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--bg);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">Net<span>Scope</span></div>
+      <div class="status-dot" id="status-dot"></div>
+      <div id="status-text">Connecting to backend...</div>
+      <div class="header-right">
+        <button onclick="togglePause()" id="pause-btn">⏸ Pause</button>
+        <button class="danger" onclick="resetData()">↺ Reset</button>
+      </div>
+    </header>
+
+    <div class="main">
+      <!-- Stat cards -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Packets</div>
+          <div class="stat-value blue" id="s-total">0</div>
+          <div class="stat-sub" id="s-pps">0 pkt/s</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Data Captured</div>
+          <div class="stat-value green" id="s-bytes">0 B</div>
+          <div class="stat-sub" id="s-uptime">Uptime: 0s</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Alerts</div>
+          <div class="stat-value" id="s-alerts" style="color: var(--red)">
+            0
+          </div>
+          <div class="stat-sub" id="s-alert-last">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Top Protocol</div>
+          <div class="stat-value purple" id="s-top-proto">—</div>
+          <div class="stat-sub" id="s-top-proto-pct">—</div>
+        </div>
+      </div>
+
+      <!-- Middle row: Protocol chart | Alerts | Top IPs -->
+      <div class="mid-row">
+        <!-- Protocol donut -->
+        <div class="panel">
+          <div class="panel-header">
+            <span
+              ><div class="dot" style="background: var(--purple)"></div>
+              Protocols</span
+            >
+          </div>
+          <div class="panel-body">
+            <div class="chart-wrap">
+              <canvas id="proto-chart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top source IPs -->
+        <div class="panel">
+          <div class="panel-header">
+            <span
+              ><div class="dot" style="background: var(--blue)"></div>
+              Top source IPs</span
+            >
+          </div>
+          <div class="panel-body" id="ip-list">
+            <div class="no-alerts">No traffic yet</div>
+          </div>
+        </div>
+
+        <!-- Alerts panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <span
+              ><div class="dot" style="background: var(--red)"></div>
+              Security alerts</span
+            >
+            <span id="alert-count" style="color: var(--red)">0</span>
+          </div>
+          <div
+            class="panel-body"
+            id="alert-list"
+            style="max-height: 240px; overflow-y: auto"
+          >
+            <div class="no-alerts">No alerts detected</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Packet table -->
+      <div class="panel">
+        <div class="panel-header">
+          <span
+            ><div class="dot" style="background: var(--green)"></div>
+            Live packet capture</span
+          >
+        </div>
+        <div class="filter-bar">
+          <select id="filter-proto" onchange="renderTable()">
+            <option value="">All protocols</option>
+            <option>TCP</option>
+            <option>UDP</option>
+            <option>HTTP</option>
+            <option>HTTPS</option>
+            <option>DNS</option>
+            <option>SSH</option>
+          </select>
+          <input
+            type="text"
+            id="filter-ip"
+            placeholder="Filter by IP..."
+            oninput="renderTable()"
+          />
+          <div class="pkt-count" id="pkt-count">0 packets</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Time</th>
+                <th>Source</th>
+                <th>Destination</th>
+                <th>Protocol</th>
+                <th>Length</th>
+                <th>Info</th>
+              </tr>
+            </thead>
+            <tbody id="pkt-tbody">
+              <tr>
+                <td colspan="7" class="empty-msg">
+                  <div class="big">⊘</div>
+                  Waiting for packets — make sure the backend is running with
+                  sudo
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API = "http://localhost:5000/api";
+      let paused = false;
+      let allPackets = [];
+      let chart = null;
+
+      // ── Init chart ──────────────────────────────
+      function initChart() {
+        const ctx = document.getElementById("proto-chart").getContext("2d");
+        chart = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                data: [],
+                backgroundColor: [
+                  "#58a6ff",
+                  "#3fb950",
+                  "#d29922",
+                  "#bc8cff",
+                  "#f85149",
+                  "#39d353",
+                  "#ff9966",
+                ],
+                borderWidth: 0,
+                hoverOffset: 4,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  color: "#7d8590",
+                  font: { family: "'JetBrains Mono', monospace", size: 11 },
+                  boxWidth: 10,
+                  padding: 10,
+                },
+              },
+            },
+            cutout: "65%",
+          },
+        });
+      }
+
+      // ── Format bytes ────────────────────────────
+      function fmtBytes(b) {
+        if (b < 1024) return b + " B";
+        if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+        return (b / 1048576).toFixed(2) + " MB";
+      }
+
+      // ── Render packet table ──────────────────────
+      function renderTable() {
+        const protoF = document.getElementById("filter-proto").value;
+        const ipF = document
+          .getElementById("filter-ip")
+          .value.trim()
+          .toLowerCase();
+
+        const filtered = allPackets.filter((p) => {
+          if (protoF && p.protocol !== protoF) return false;
+          if (ipF && !p.src.includes(ipF) && !p.dst.includes(ipF)) return false;
+          return true;
+        });
+
+        document.getElementById("pkt-count").textContent =
+          filtered.length + " packets";
+
+        if (!filtered.length) {
+          document.getElementById("pkt-tbody").innerHTML =
+            '<tr><td colspan="7" class="empty-msg"><div class="big">⊘</div>No matching packets</td></tr>';
+          return;
+        }
+
+        const rows = filtered
+          .slice(0, 100)
+          .map(
+            (p) => `
+    <tr>
+      <td style="color:var(--muted)">${p.id}</td>
+      <td style="color:var(--muted)">${p.time}</td>
+      <td class="src">${p.src}</td>
+      <td class="dst">${p.dst}</td>
+      <td><span class="proto-badge proto-${p.protocol}">${p.protocol}</span></td>
+      <td class="len">${p.length}</td>
+      <td class="info">${p.info}</td>
+    </tr>`,
+          )
+          .join("");
+        document.getElementById("pkt-tbody").innerHTML = rows;
+      }
+
+      // ── Render alerts ───────────────────────────
+      function renderAlerts(alertData) {
+        document.getElementById("alert-count").textContent = alertData.length;
+        document.getElementById("s-alerts").textContent = alertData.length;
+        if (alertData.length === 0) {
+          document.getElementById("alert-list").innerHTML =
+            '<div class="no-alerts">No alerts detected</div>';
+          document.getElementById("s-alert-last").textContent = "—";
+          return;
+        }
+        document.getElementById("s-alert-last").textContent = alertData[0].type;
+        document.getElementById("alert-list").innerHTML = alertData
+          .slice(0, 15)
+          .map(
+            (a) => `
+    <div class="alert-item ${a.severity}">
+      <span class="alert-time">${a.time}</span>
+      <div class="alert-type">${a.type}</div>
+      <div class="alert-src">${a.src} — ${a.detail}</div>
+    </div>`,
+          )
+          .join("");
+      }
+
+      // ── Render top IPs ──────────────────────────
+      function renderIPs(ips) {
+        if (!ips || ips.length === 0) {
+          document.getElementById("ip-list").innerHTML =
+            '<div class="no-alerts">No traffic yet</div>';
+          return;
+        }
+        const max = ips[0][1];
+        document.getElementById("ip-list").innerHTML = ips
+          .slice(0, 8)
+          .map(
+            ([ip, cnt]) => `
+    <div class="ip-row">
+      <div class="ip-addr">${ip}</div>
+      <div class="ip-bar-wrap"><div class="ip-bar" style="width:${((cnt / max) * 100).toFixed(0)}%"></div></div>
+      <div class="ip-count">${cnt}</div>
+    </div>`,
+          )
+          .join("");
+      }
+
+      // ── Update chart ─────────────────────────────
+      function updateChart(proto) {
+        const entries = Object.entries(proto)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 7);
+        chart.data.labels = entries.map((e) => e[0]);
+        chart.data.datasets[0].data = entries.map((e) => e[1]);
+        chart.update("none");
+      }
+
+      // ── Main poll loop ───────────────────────────
+      async function poll() {
+        if (paused) return;
+        try {
+          const [pktRes, statsRes, alertRes] = await Promise.all([
+            fetch(API + "/packets?limit=100"),
+            fetch(API + "/stats"),
+            fetch(API + "/alerts"),
+          ]);
+
+          const pkts = await pktRes.json();
+          const stats = await statsRes.json();
+          const alerts = await alertRes.json();
+
+          allPackets = pkts;
+          renderTable();
+          renderAlerts(alerts);
+          renderIPs(stats.top_ips);
+          updateChart(stats.protocol_counts || {});
+
+          // Stats cards
+          document.getElementById("s-total").textContent =
+            stats.total_packets.toLocaleString();
+          document.getElementById("s-pps").textContent =
+            stats.packets_per_sec + " pkt/s";
+          document.getElementById("s-bytes").textContent = fmtBytes(
+            stats.total_bytes,
+          );
+          document.getElementById("s-uptime").textContent =
+            "Uptime: " + stats.uptime_seconds + "s";
+
+          const topEntry = Object.entries(stats.protocol_counts || {}).sort(
+            (a, b) => b[1] - a[1],
+          )[0];
+          if (topEntry) {
+            const pct = ((topEntry[1] / stats.total_packets) * 100).toFixed(0);
+            document.getElementById("s-top-proto").textContent = topEntry[0];
+            document.getElementById("s-top-proto-pct").textContent =
+              pct + "% of traffic";
+          }
+
+          document.getElementById("status-text").textContent =
+            "Live capture running";
+          document.getElementById("status-dot").style.background =
+            "var(--green)";
+        } catch (e) {
+          document.getElementById("status-text").textContent =
+            "Backend offline — start app.py";
+          document.getElementById("status-dot").style.background = "var(--red)";
+          document.getElementById("status-dot").style.boxShadow =
+            "0 0 6px var(--red)";
+        }
+      }
+
+      function togglePause() {
+        paused = !paused;
+        document.getElementById("pause-btn").textContent = paused
+          ? "▶ Resume"
+          : "⏸ Pause";
+      }
+
+      async function resetData() {
+        if (!confirm("Reset all captured data?")) return;
+        await fetch(API + "/reset", { method: "POST" });
+        allPackets = [];
+        renderTable();
+      }
+
+      // ── Bootstrap ───────────────────────────────
+      initChart();
+      poll();
+      setInterval(poll, 1000);
+    </script>
+  </body>
+</html>
