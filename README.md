@@ -82,7 +82,7 @@ cd NetScope
 
 **2. Import into Vercel**
 
-- Go to [vercel.com](https://vercel.com) → New Project → Import your GitHub repo
+- Go to https://net-scope-two.vercel.app/
 - Leave Root Directory blank
 - Framework Preset: Other
 - Click Deploy
